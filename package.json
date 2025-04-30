@@ -1,0 +1,20 @@
+{
+  "name": "paddle-sandbox-to-prod-migrator",
+  "version": "1.0.0",
+  "description": "Tool to migrate Paddle products and discounts from sandbox to production",
+  "main": "server.js",
+  "scripts": {
+    "start": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "node server.js",
+    "client": "cd frontend && npm start",
+    "install-all": "npm install && cd frontend && npm install",
+    "build": "cd frontend && npm run build"
+  },
+  "dependencies": {
+    "concurrently": "^8.2.2",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "axios": "^1.6.7",
+    "dotenv": "^16.4.1"
+  }
+}
