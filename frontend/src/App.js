@@ -79,7 +79,13 @@ function App() {
       }
     } catch (error) {
       console.error('Migration error:', error);
-      setStatus('❌ Error during migration');
+      const errorMessage = error.response?.data?.error || error.message;
+      if (selected.length > 0) {
+        setStatus(`❌ Error during product migration: ${errorMessage}`);
+      }
+      if (selectedDiscounts.length > 0) {
+        setDiscountStatus(`❌ Error during discount migration: ${errorMessage}`);
+      }
     } finally {
       setLoading(false);
     }

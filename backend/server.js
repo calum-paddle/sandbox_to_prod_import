@@ -187,6 +187,29 @@ const fetchDiscountInfo = async (discountId) => {
     });
 
     const discount = response.data.data;
+    console.log('Original discount:', {
+      id: discountId,
+      restrict_to: discount.restrict_to
+    });
+
+    // Map the restrict_to IDs, only keeping successfully mapped ones
+    let mappedRestrictTo = [];
+    
+    if (discount.restrict_to) {
+      mappedRestrictTo = discount.restrict_to
+        .map(originalId => {
+          const mappedId = originalId.startsWith('pro') 
+            ? productIdMapping.get(originalId)
+            : originalId.startsWith('pri')
+              ? priceIdMapping.get(originalId)
+              : null;
+          console.log(`Mapping ${originalId} to ${mappedId}`);
+          return mappedId;
+        })
+        .filter(id => id != null); // Remove both null and undefined values
+    }
+
+    console.log('Mapped restrict_to:', mappedRestrictTo);
 
     const discountData = {
       amount: discount.amount,
@@ -198,26 +221,23 @@ const fetchDiscountInfo = async (discountId) => {
       recur: discount.recur,
       ...(discount.maximum_recurring_intervals && { maximum_recurring_intervals: discount.maximum_recurring_intervals }),
       ...(discount.usage_limit && { usage_limit: discount.usage_limit }),
-      ...(discount.restrict_to && {
-        restrict_to: discount.restrict_to
-          .map(originalId => {
-            if (originalId.startsWith('pro')) {
-              return productIdMapping.get(originalId);
-            } else if (originalId.startsWith('pri')) {
-              return priceIdMapping.get(originalId);
-            }
-            return null;
-          })
-          .filter(id => id !== null)  // Remove any IDs that weren't found in the mappings
-      }),
+      // If original had restrict_to but no valid mappings found, set to null
+      restrict_to: discount.restrict_to ? (mappedRestrictTo.length > 0 ? mappedRestrictTo : null) : undefined,
       ...(discount.expires_at && { expires_at: discount.expires_at }),
       ...(discount.custom_data && { custom_data: discount.custom_data }),
     };
 
+    console.log('Final discount data:', {
+      id: discountId,
+      restrict_to: discountData.restrict_to
+    });
+
     await createDiscountInProduction(discountData);
+    return { discount_id: discountId, status: "migrated" };
     
   } catch (error) {
-    console.error('Error fetching discounts:', error.response?.data || error.message);
+    console.error('Error creating discount in Production Account:', error);
+    return { discount_id: discountId, error: error.response?.data || error.message };
   }
 };
 
@@ -272,18 +292,18 @@ app.get('/discounts', async (req, res) => {
 
 
 app.post('/migrate_products', async (req, res) => {
-
   const { product_ids, sandbox_key, production_key, test_mode } = req.body;
 
   console.log('Test mode:', test_mode);
   console.log('Using sandbox key:', sandbox_key);
   console.log('Using production key:', production_key);
 
-  sandboxApiKey = sandbox_key
-  productionApiKey = production_key
+  sandboxApiKey = sandbox_key;
+  productionApiKey = production_key;
   if (test_mode) {
     productionUrl = sandboxUrl;
   }
+  
   if (!Array.isArray(product_ids) || product_ids.length === 0) {
     return res.status(400).json({ error: "Missing or invalid product_ids array." });
   }
@@ -299,7 +319,13 @@ app.post('/migrate_products', async (req, res) => {
 });
 
 app.post('/migrate_discounts', async (req, res) => {
-  const { discount_ids } = req.body;
+  const { discount_ids, sandbox_key, production_key, test_mode } = req.body;
+
+  sandboxApiKey = sandbox_key;
+  productionApiKey = production_key;
+  if (test_mode) {
+    productionUrl = sandboxUrl;
+  }
 
   if (!Array.isArray(discount_ids) || discount_ids.length === 0) {
     return res.status(400).json({ error: "Missing or invalid discount_ids array." });
@@ -308,7 +334,7 @@ app.post('/migrate_discounts', async (req, res) => {
   const results = [];
 
   for (const discountId of discount_ids) {
-    console.log(discountId)
+    console.log(discountId);
     const result = await fetchDiscountInfo(discountId);
     results.push(result);
   }
