@@ -198,19 +198,23 @@ const fetchDiscountInfo = async (discountId) => {
       recur: discount.recur,
       ...(discount.maximum_recurring_intervals && { maximum_recurring_intervals: discount.maximum_recurring_intervals }),
       ...(discount.usage_limit && { usage_limit: discount.usage_limit }),
-      restrict_to: discount.restrict_to?.map(originalId => {
-        if (originalId.startsWith('pro')) {
-          return productIdMapping.get(originalId) || originalId;
-        } else if (originalId.startsWith('pri')) {
-          return priceIdMapping.get(originalId) || originalId;
-        }
-        return originalId;
+      ...(discount.restrict_to && {
+        restrict_to: discount.restrict_to
+          .map(originalId => {
+            if (originalId.startsWith('pro')) {
+              return productIdMapping.get(originalId);
+            } else if (originalId.startsWith('pri')) {
+              return priceIdMapping.get(originalId);
+            }
+            return null;
+          })
+          .filter(id => id !== null)  // Remove any IDs that weren't found in the mappings
       }),
       ...(discount.expires_at && { expires_at: discount.expires_at }),
       ...(discount.custom_data && { custom_data: discount.custom_data }),
     };
 
-      await createDiscountInProduction(discountData);
+    await createDiscountInProduction(discountData);
     
   } catch (error) {
     console.error('Error fetching discounts:', error.response?.data || error.message);
