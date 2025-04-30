@@ -6,7 +6,7 @@ A simple tool to migrate products and discounts from Paddle Sandbox to Productio
 
 1. Install dependencies and start the app:
    ```bash
-   npm install
+   npm run install-all
    npm start
    ```
    This will start both the backend and frontend servers.
