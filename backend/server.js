@@ -1,20 +1,33 @@
 import 'dotenv/config';
 import express from 'express';
 import axios from 'axios';
+import cors from 'cors';
 
 const app = express();
 const PORT = process.env.PORT || 8080;
-import cors from 'cors';
 
-app.use(cors({
-  origin: 'http://localhost:3000', // your React dev server
-}));
+// Simple CORS setup for local development
+app.use(cors());  // This allows all origins in development
 
 app.use(express.json());
 
+// API URLs
 const sandboxUrl = "https://sandbox-api.paddle.com";
 let productionUrl = "https://api.paddle.com";
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({
+    error: process.env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message,
+    details: process.env.NODE_ENV === 'production' ? undefined : err.stack
+  });
+});
+
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', environment: process.env.NODE_ENV });
+});
 
 let sandboxApiKey = ""
 let productionApiKey = ""
