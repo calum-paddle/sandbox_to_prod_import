@@ -12,8 +12,8 @@ app.use(cors());  // This allows all origins in development
 app.use(express.json());
 
 // API URLs
-const sandboxUrl = "https://sandbox-api.paddle.com";
-let productionUrl = "https://api.paddle.com";
+// let sandboxUrl = "https://sandbox-api.paddle.com";
+// let productionUrl = "https://api.paddle.com";
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -36,9 +36,26 @@ const productIdMapping = new Map();
 const priceIdMapping = new Map();
 let discountsToMigrate = {}
 
-const fetchAllProducts = async (apiKey) => {
+const fetchAllProducts = async (apiKey, reverseMode, testMode) => {
+
+  console.log("Fetching API Key: ", apiKey)
+  console.log("Reverse Mode: ", reverseMode)
+  console.log("Test Mode: ", testMode)
+
+  let fromUrl;
+  
+  if (reverseMode) {
+    fromUrl = "https://api.paddle.com";
+  } else if (testMode) {
+    fromUrl = "https://sandbox-api.paddle.com";
+  } else {
+    fromUrl = "https://sandbox-api.paddle.com";
+  }
+
   try {
-    const response = await axios.get(`${sandboxUrl}/products`, {
+    // const url = reverseMode ? `${productionUrl}/products` : `${sandboxUrl}/products`;
+    console.log("From URL for Products: ", fromUrl)
+    const response = await axios.get(`${fromUrl}/products`, {
       headers: {
         Authorization: apiKey,
         'Content-Type': 'application/json',
@@ -57,11 +74,11 @@ const fetchAllProducts = async (apiKey) => {
   }
 };
 
-const fetchProductInfo = async (productId) => {
+const fetchProductInfo = async (productId, from_key, to_key, fromUrl, toUrl) => {
   try {
-    const response = await axios.get(`${sandboxUrl}/products/${productId}`, {
+    const response = await axios.get(`${fromUrl}/products/${productId}`, {
       headers: {
-        Authorization: `Bearer ${sandboxApiKey}`,
+        Authorization: `Bearer ${from_key}`,
         'Content-Type': 'application/json',
       },
     });
@@ -76,35 +93,44 @@ const fetchProductInfo = async (productId) => {
       ...(base.custom_data && { custom_data: base.custom_data })
     };
 
-    await createProductInProduction(productData, productId);
+    await createProductInProduction(productData, productId, toUrl, to_key, fromUrl, from_key);
     return { product_id: productId, status: "migrated" };
   } catch (error) {
     return { product_id: productId, error: error.response?.data || error.message };
   }
 };
 
-const createProductInProduction = async (productData, originalProductId) => {
+const createProductInProduction = async (productData, originalProductId, toUrl, to_key, fromUrl, from_key) => {
   try {
+    console.log("Creating Product Using URL: ", toUrl)
+    console.log("Creating Product Using APIKey: ", to_key)
     const response = await axios.post(
-      `${productionUrl}/products`,
+      `${toUrl}/products`,
       productData,
       {
-        headers: { Authorization: `Bearer ${productionApiKey}` }
+        headers: { Authorization: `Bearer ${to_key}` }
       }
     );
     productIdMapping.set(originalProductId, response.data.data.id);
-    await fetchPrices(originalProductId, response.data.data.id);
+    await fetchPrices(originalProductId, response.data.data.id, fromUrl, from_key, toUrl, to_key);
   } catch (error) {
-    console.error('Error creating product in Production Account:', error);
+    // console.error('Error creating product in Production Account:', error);
+    if (error.response) {
+      console.error('❌ Paddle API error status:', error.response.status);
+      console.error('❌ Paddle API error data:', JSON.stringify(error.response.data, null, 2));
+    } else {
+      console.error('❌ Request error:', error);
+    }
   }
 };
 
-const fetchPrices = async (productId, newProductId) => {
+const fetchPrices = async (productId, newProductId, fromUrl, from_key, toUrl, to_key) => {
+  console.log("Get Price URL: ", `${fromUrl}/prices`)
   try {
-    const response = await axios.get(`${sandboxUrl}/prices`, {
+    const response = await axios.get(`${fromUrl}/prices`, {
       params: { product_id: productId },
       headers: {
-        Authorization: `Bearer ${sandboxApiKey}`,
+        Authorization: `Bearer ${from_key}`,
         'Content-Type': 'application/json',
       },
     });
@@ -130,7 +156,7 @@ const fetchPrices = async (productId, newProductId) => {
         ...(price.custom_data && { custom_data: price.custom_data }),
       };
 
-      const newPriceId = await createPriceInProduction(priceData);
+      const newPriceId = await createPriceInProduction(priceData, toUrl, to_key);
       priceIdMapping.set(price.id, newPriceId);
     }
 
@@ -140,13 +166,13 @@ const fetchPrices = async (productId, newProductId) => {
   }
 };
 
-const createPriceInProduction = async (priceData) => {
+const createPriceInProduction = async (priceData, toUrl, to_key) => {
   try {
     const response = await axios.post(
-      `${productionUrl}/prices`,
+      `${toUrl}/prices`,
       priceData,
       {
-        headers: { Authorization: `Bearer ${productionApiKey}` }
+        headers: { Authorization: `Bearer ${to_key}` }
       }
     );
     return response.data.data.id;
@@ -155,9 +181,23 @@ const createPriceInProduction = async (priceData) => {
   }
 };
 
-const fetchAllDiscounts = async (apiKey) => {
+const fetchAllDiscounts = async (apiKey, reverseMode, testMode) => {
+  
+  let fromUrl;
+  
+  if (reverseMode) {
+    fromUrl = "https://api.paddle.com";
+  } else if (testMode) {
+    fromUrl = "https://sandbox-api.paddle.com";
+  } else {
+    fromUrl = "https://sandbox-api.paddle.com";
+  }
+
+
   try {
-    const response = await axios.get(`${sandboxUrl}/discounts`, {
+    console.log("From URL for Discounts: ", fromUrl)
+    // const url = reverseMode ? `${productionUrl}/discounts` : `${sandboxUrl}/discounts`;
+    const response = await axios.get(`${fromUrl}/discounts`, {
       headers: {
         Authorization: apiKey,
         'Content-Type': 'application/json',
@@ -177,11 +217,11 @@ const fetchAllDiscounts = async (apiKey) => {
 };
 
 
-const fetchDiscountInfo = async (discountId) => {
+const fetchDiscountInfo = async (discountId, fromUrl, from_key, toUrl, to_key) => {
   try {
-    const response = await axios.get(`${sandboxUrl}/discounts/${discountId}`, {
+    const response = await axios.get(`${fromUrl}/discounts/${discountId}`, {
       headers: {
-        Authorization: `Bearer ${sandboxApiKey}`,
+        Authorization: `Bearer ${from_key}`,
         'Content-Type': 'application/json',
       },
     });
@@ -232,7 +272,7 @@ const fetchDiscountInfo = async (discountId) => {
       restrict_to: discountData.restrict_to
     });
 
-    await createDiscountInProduction(discountData);
+    await createDiscountInProduction(discountData, toUrl, to_key);
     return { discount_id: discountId, status: "migrated" };
     
   } catch (error) {
@@ -241,13 +281,13 @@ const fetchDiscountInfo = async (discountId) => {
   }
 };
 
-const createDiscountInProduction = async (discountData) => {
+const createDiscountInProduction = async (discountData, toUrl, to_key) => {
   try {
     const response = await axios.post(
-      `${productionUrl}/discounts`,
+      `${toUrl}/discounts`,
       discountData,
       {
-        headers: { Authorization: `Bearer ${productionApiKey}` }
+        headers: { Authorization: `Bearer ${to_key}` }
       }
     );
   } catch (error) {
@@ -260,13 +300,20 @@ const createDiscountInProduction = async (discountData) => {
 //
 
 app.get('/products', async (req, res) => {
+  
+  // console.log(req.headers.authorization)
+  // console.log(req.query.reverseMode)
+  const reverseMode = req.query.reverseMode === 'true';
+  const testMode = req.query.testMode === 'true';
+
   const apiKey = req.headers.authorization;
+
   if (!apiKey) {
     return res.status(401).json({ error: 'Missing or invalid API key' });
   }
 
   try {
-    const result = await fetchAllProducts(apiKey); 
+    const result = await fetchAllProducts(apiKey, reverseMode, testMode); 
     res.json({ result }); 
   } catch (err) {
     console.error('Failed to fetch products:', err);
@@ -275,14 +322,18 @@ app.get('/products', async (req, res) => {
 });
 
 app.get('/discounts', async (req, res) => {
+
+  const reverseMode = req.query.reverseMode === 'true';
+  const testMode = req.query.testMode === 'true';
   const apiKey = req.headers.authorization;
+
 
   if (!apiKey) {
     return res.status(401).json({ error: 'Missing or invalid API key' });
   }
 
   try {
-    const result = await fetchAllDiscounts(apiKey); 
+    const result = await fetchAllDiscounts(apiKey, reverseMode, testMode); 
     res.json({ result }); 
   } catch (err) {
     console.error('Failed to fetch discounts:', err);
@@ -292,17 +343,39 @@ app.get('/discounts', async (req, res) => {
 
 
 app.post('/migrate_products', async (req, res) => {
-  const { product_ids, sandbox_key, production_key, test_mode } = req.body;
+  const { product_ids, from_key, to_key, testMode, reverseMode } = req.body;
 
-  console.log('Test mode:', test_mode);
-  console.log('Using sandbox key:', sandbox_key);
-  console.log('Using production key:', production_key);
+  console.log("Migrating Products")
+  console.log('Test mode:', testMode);
+  console.log('Reverse mode:', reverseMode);
+  console.log('Using first key:', from_key);
+  console.log('Using second key:', to_key);
 
-  sandboxApiKey = sandbox_key;
-  productionApiKey = production_key;
-  if (test_mode) {
-    productionUrl = sandboxUrl;
+  let fromUrl;
+  let toUrl;
+  
+  if (reverseMode) {
+    fromUrl = "https://api.paddle.com";
+    toUrl = "https://sandbox-api.paddle.com"
+  } else if (testMode) {
+    fromUrl = "https://sandbox-api.paddle.com";
+    toUrl = "https://sandbox-api.paddle.com"
+  } else {
+    fromUrl = "https://sandbox-api.paddle.com";
+    toUrl = "https://api.paddle.com"
   }
+
+  // sandboxApiKey = from_key;
+  // productionApiKey = to_key;
+  // if (test_mode) {
+  //   productionUrl = sandboxUrl;
+  // }
+
+  // if (reverse_mode) {
+  //   sandboxUrl = "https://api.paddle.com"
+  //   productionUrl = "https://sandbox-api.paddle.com"
+
+  // }
   
   if (!Array.isArray(product_ids) || product_ids.length === 0) {
     return res.status(400).json({ error: "Missing or invalid product_ids array." });
@@ -311,7 +384,7 @@ app.post('/migrate_products', async (req, res) => {
   const results = [];
 
   for (const productId of product_ids) {
-    const result = await fetchProductInfo(productId);
+    const result = await fetchProductInfo(productId, from_key, to_key, fromUrl, toUrl);
     results.push(result);
   }
 
@@ -319,13 +392,33 @@ app.post('/migrate_products', async (req, res) => {
 });
 
 app.post('/migrate_discounts', async (req, res) => {
-  const { discount_ids, sandbox_key, production_key, test_mode } = req.body;
+  const { discount_ids, from_key, to_key, testMode, reverseMode } = req.body;
 
-  sandboxApiKey = sandbox_key;
-  productionApiKey = production_key;
-  if (test_mode) {
-    productionUrl = sandboxUrl;
+  console.log("Migrating Discounts")
+  console.log('Test mode:', testMode);
+  console.log('Reverse mode:', reverseMode);
+  console.log('Using first key:', from_key);
+  console.log('Using second key:', to_key);
+
+  let fromUrl;
+  let toUrl;
+  
+  if (reverseMode) {
+    fromUrl = "https://api.paddle.com";
+    toUrl = "https://sandbox-api.paddle.com"
+  } else if (testMode) {
+    fromUrl = "https://sandbox-api.paddle.com";
+    toUrl = "https://sandbox-api.paddle.com"
+  } else {
+    fromUrl = "https://sandbox-api.paddle.com";
+    toUrl = "https://api.paddle.com"
   }
+
+  // sandboxApiKey = sandbox_key;
+  // productionApiKey = production_key;
+  // if (test_mode) {
+  //   productionUrl = sandboxUrl;
+  // }
 
   if (!Array.isArray(discount_ids) || discount_ids.length === 0) {
     return res.status(400).json({ error: "Missing or invalid discount_ids array." });
@@ -335,7 +428,7 @@ app.post('/migrate_discounts', async (req, res) => {
 
   for (const discountId of discount_ids) {
     console.log(discountId);
-    const result = await fetchDiscountInfo(discountId);
+    const result = await fetchDiscountInfo(discountId, fromUrl, from_key, toUrl, to_key);
     results.push(result);
   }
 

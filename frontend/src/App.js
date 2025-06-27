@@ -12,6 +12,7 @@ function App() {
   const [sandboxKeyVisible, setSandboxKeyVisible] = useState(false);
   const [productionKeyVisible, setProductionKeyVisible] = useState(false);
   const [testMode, setTestMode] = useState(false);
+  const [reverseMode, setReverseMode] = useState(false);
   const [status, setStatus] = useState('');
   const [discountStatus, setDiscountStatus] = useState('');
   const [loading, setLoading] = useState(false);
@@ -96,20 +97,31 @@ function App() {
     );
   };
 
-  const fetchSandboxItems = async () => {
+  const fetchItems = async () => {
     if (!sandboxKey) {
-      alert('Please enter your Sandbox API key first.');
+      alert('Please enter your API key first.');
       return;
     }
-
     try {
       setLoading(true);
       const config = { headers: { 'Authorization': `Bearer ${sandboxKey}` } };
 
-      const productsRes = await axios.get('http://localhost:8080/products', config);
+      const productsRes = await axios.get('http://localhost:8080/products', {
+        ...config,
+        params: { 
+          reverseMode,
+          testMode
+        }
+      });
       setProducts(productsRes.data.result);
 
-      const discountsRes = await axios.get('http://localhost:8080/discounts', config);
+      const discountsRes = await axios.get('http://localhost:8080/discounts', {
+        ...config,
+        params: { 
+          reverseMode,
+          testMode
+        }
+      });
       setDiscounts(discountsRes.data.result);
 
       setDataFetched(true);
@@ -129,9 +141,10 @@ function App() {
 
     setLoading(true);
     const payload = {
-      sandbox_key: sandboxKey,
-      production_key: productionKey,
-      test_mode: testMode,
+      from_key: sandboxKey,
+      to_key: productionKey,
+      testMode: testMode,
+      reverseMode: reverseMode
     };
 
     try {
@@ -178,7 +191,7 @@ function App() {
             <div className="input-group">
               <input
                 type={sandboxKeyVisible ? "text" : "password"}
-                placeholder="Sandbox API Key"
+                placeholder={reverseMode ? "Production API Key" : "Sandbox API Key"}
                 value={sandboxKey}
                 onChange={(e) => setSandboxKey(e.target.value)}
               />
@@ -193,7 +206,7 @@ function App() {
             <div className="input-group">
               <input
                 type={productionKeyVisible ? "text" : "password"}
-                placeholder={testMode ? "Sandbox API Key 2" : "Production API Key"}
+                placeholder={reverseMode ? "Sandbox API Key" : (testMode ? "Sandbox API Key 2" : "Production API Key")}
                 value={productionKey}
                 onChange={(e) => setProductionKey(e.target.value)}
               />
@@ -207,21 +220,57 @@ function App() {
             </div>
           </div>
 
+          <label className="normal-mode-toggle">
+            <input
+              type="radio"
+              name="mode"
+              checked={!testMode && !reverseMode}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setTestMode(false);
+                  setReverseMode(false);
+                }
+              }}
+            />
+            <span>Normal Mode (Sandbox ➡️ Production)</span>
+          </label>
+
           <label className="test-mode-toggle">
             <input
-              type="checkbox"
+              type="radio"
+              name="mode"
               checked={testMode}
-              onChange={(e) => setTestMode(e.target.checked)}
+              onChange={(e) => {
+                setTestMode(e.target.checked);
+                if (e.target.checked) {
+                  setReverseMode(false);
+                }
+              }}
             />
             <span>Test Mode (Sandbox ➡️ Sandbox)</span>
           </label>
 
+          <label className="reverse-mode-toggle">
+            <input
+              type="radio"
+              name="mode"
+              checked={reverseMode}
+              onChange={(e) => {
+                setReverseMode(e.target.checked);
+                if (e.target.checked) {
+                  setTestMode(false);
+                }
+              }}
+            />
+            <span>Reverse Mode (Production ➡️ Sandbox)</span>
+          </label>
+
           <button 
-            onClick={fetchSandboxItems} 
+            onClick={fetchItems} 
             className="primary-button"
             disabled={loading || !sandboxKey}
           >
-            {loading ? 'Fetching...' : 'Get Sandbox Items'}
+            {loading ? 'Fetching...' : (reverseMode ? 'Get Production Items' : 'Get Sandbox Items')}
           </button>
         </div>
 
